@@ -1,0 +1,337 @@
+<title>Tourline Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap">
+<style>
+/*TOURLINE_CSS*/
+</style>
+<style>
+/* Layout: a working example app on the left, the things a developer cares about (checklist, copy, events) on the right, the code underneath. */
+:root {
+  --paper: #f4f7f5;
+  --surface: #ffffff;
+  --ink: #13201b;
+  --muted: #5a6b64;
+  --line: #dbe4df;
+  --accent: #0f766e;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f2ef;
+  --bad: #b4410f;
+  --bad-soft: #fbeae2;
+  --good: #187a3e;
+  --good-soft: #e3f3e8;
+  --code-bg: #10201b;
+  --code-ink: #d7ebe4;
+  --code-dim: #7d9a90;
+  --code-key: #5eead4;
+  --code-str: #fcd34d;
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1412;
+    --surface: #151f1c;
+    --ink: #e4eee9;
+    --muted: #93a59d;
+    --line: #263430;
+    --accent: #2dd4bf;
+    --accent-ink: #032420;
+    --accent-soft: #163a35;
+    --bad: #fb8a5c;
+    --bad-soft: #3a2018;
+    --good: #5bd88b;
+    --good-soft: #153222;
+    --code-bg: #08100d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1412;
+  --surface: #151f1c;
+  --ink: #e4eee9;
+  --muted: #93a59d;
+  --line: #263430;
+  --accent: #2dd4bf;
+  --accent-ink: #032420;
+  --accent-soft: #163a35;
+  --bad: #fb8a5c;
+  --bad-soft: #3a2018;
+  --good: #5bd88b;
+  --good-soft: #153222;
+  --code-bg: #08100d;
+  color-scheme: dark;
+}
+
+body {
+  /* Tourline is themed entirely through its tokens; these map it onto the page palette. */
+  --tl-accent: var(--accent);
+  --tl-accent-text: var(--accent-ink);
+  --tl-accent-soft: var(--accent-soft);
+  --tl-surface: var(--surface);
+  --tl-text: var(--ink);
+  --tl-text-muted: var(--muted);
+  --tl-border: var(--line);
+  --tl-success: var(--good);
+  --tl-font: var(--font-body);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+  display: grid;
+  gap: 28px;
+}
+
+.intro { display: grid; gap: 10px; max-width: 62ch; }
+.intro__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 6vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.intro__name span { color: var(--accent); }
+.intro__lede { margin: 0; font-size: 18px; color: var(--muted); text-wrap: balance; }
+.intro__lede strong { color: var(--ink); font-weight: 600; }
+.intro__tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.intro__tags li {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.stage { min-width: 0; }
+.side { display: grid; gap: 14px; min-width: 0; }
+
+/* Example app */
+.mock {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  min-height: 440px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.mock__side { padding: 18px 12px; border-right: 1px solid var(--line); background: var(--paper); }
+.mock__brand { margin: 0 8px 18px; font-weight: 800; letter-spacing: -0.02em; font-size: 17px; }
+.mock__nav { display: grid; gap: 2px; }
+.mock__nav button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.mock__nav button:hover { color: var(--ink); background: var(--accent-soft); }
+.mock__nav button[data-active="true"] { color: var(--ink); background: var(--accent-soft); font-weight: 600; }
+.mock__main { display: grid; align-content: start; gap: 18px; padding: 18px; min-width: 0; }
+.mock__bar { display: flex; flex-wrap: wrap; gap: 10px; }
+.mock__search {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+.mock__cta {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 2px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.stat__label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.stat__value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat__note { font-size: 13px; color: var(--good); }
+.stat__note--bad { color: var(--bad); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.table td { padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-size: 13px; }
+.pill { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+.pill[data-status="overdue"] { background: var(--bad-soft); color: var(--bad); }
+.pill[data-status="paid"] { background: var(--good-soft); color: var(--good); }
+
+.chart { padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.chart--loading { display: grid; place-items: center; min-height: 260px; color: var(--muted); }
+.chart__title { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.chart__bars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  height: 220px;
+  align-items: end;
+  background: repeating-linear-gradient(to top, var(--line) 0 1px, transparent 1px 25%);
+}
+.chart__col { display: grid; grid-template-rows: auto 1fr auto; height: 100%; justify-items: center; gap: 4px; }
+.chart__value { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); align-self: end; }
+.chart__bar { width: 70%; max-width: 44px; align-self: end; border-radius: 6px 6px 2px 2px; background: var(--accent); }
+.chart__col:last-child .chart__value { color: var(--ink); font-weight: 600; }
+.chart__label { font-size: 12px; color: var(--muted); }
+
+/* Side panels */
+.panel { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.panel__title { display: grid; gap: 1px; margin: 0; font-size: 15px; font-weight: 650; }
+.panel__hint { font-size: 12px; font-weight: 400; color: var(--muted); }
+.switch { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; margin-top: 2px; }
+.log { display: grid; gap: 4px; max-height: 220px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.log__empty { margin: 0; font-size: 13px; color: var(--muted); }
+.log__row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.log__row:first-child { background: var(--accent-soft); }
+.log__type { color: var(--accent); }
+.log__row[data-type="tour_skipped"] .log__type { color: var(--bad); }
+.log__row[data-type="tour_completed"] .log__type { color: var(--good); }
+.log__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log__step { color: var(--muted); font-variant-numeric: tabular-nums; }
+.reset {
+  justify-self: start;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.reset:hover { color: var(--ink); }
+
+/* Code */
+.code { display: grid; gap: 12px; }
+.code__title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.code__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.code__block { min-width: 0; margin: 0; }
+.code__block figcaption { margin-bottom: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.code__block pre {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.k { color: var(--code-key); }
+.s { color: var(--code-str); }
+.c { color: var(--code-dim); }
+
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .layout, .code__grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .mock { grid-template-columns: minmax(0, 1fr); }
+  .mock__side { border-right: 0; border-bottom: 1px solid var(--line); }
+  .mock__nav { grid-auto-flow: column; overflow-x: auto; }
+  .mock__brand { margin-bottom: 10px; }
+  .stats { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<main class="page">
+  <header class="intro">
+    <h1 class="intro__name">Tour<span>line</span></h1>
+    <p class="intro__lede"><strong>Product tours that live in your code.</strong> Type-safe steps, anchors that survive refactors, and events for a drop-off funnel. Try it on the example invoicing app below.</p>
+    <ul class="intro__tags">
+      <li>React 18+</li>
+      <li><li>~9 kB gzip</li>lt; 8 kB gzip</li>
+      <li>TypeScript</li>
+      <li>MIT</li>
+    </ul>
+  </header>
+
+  <div id="demo"></div>
+
+  <section class="code" aria-labelledby="code-heading">
+    <h2 id="code-heading" class="code__title">The whole integration</h2>
+    <div class="code__grid">
+      <figure class="code__block">
+        <figcaption>onboarding.ts</figcaption>
+<pre><code><span class="k">export const</span> welcomeTour = defineTour({
+  id: <span class="s">"welcome"</span>,
+  steps: [
+    { id: <span class="s">"hello"</span>, title: <span class="s">"Welcome to Harbor"</span>, content: <span class="s">"…"</span> },
+    { id: <span class="s">"new"</span>, target: <span class="s">"new-invoice"</span>,
+      title: <span class="s">"Create your first invoice"</span>, content: <span class="s">"…"</span> },
+  ],
+});
+
+<span class="k">export const</span> onboarding = createTourline([welcomeTour] <span class="k">as const</span>);</code></pre>
+      </figure>
+      <figure class="code__block">
+        <figcaption>App.tsx</figcaption>
+<pre><code>&lt;TourlineProvider tours={onboarding.tours} onEvent={track}&gt;
+  &lt;button {...onboarding.anchor(<span class="s">"new-invoice"</span>)}&gt;
+    New invoice
+  &lt;/button&gt;
+&lt;/TourlineProvider&gt;
+
+<span class="c">// onboarding.anchor("new-invoce")  → compile error</span>
+<span class="k">const</span> tour = onboarding.useTour(<span class="s">"welcome"</span>);
+tour.start();</code></pre>
+      </figure>
+    </div>
+  </section>
+</main>
+
+<script>
+/*DEMO_JS*/
+</script>
