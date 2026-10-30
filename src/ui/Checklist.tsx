@@ -24,6 +24,12 @@ export const Checklist = ({ title = "Getting started", items, countSkipped = fal
     const progress = state.progress[item.tourId];
     return progress === undefined ? "idle" : progress.status;
   });
+  // A skipped tour picks up where the user left it; any other starts from the beginning.
+  const launch = (tourId: string) => {
+    const progress = state.progress[tourId];
+    const fromStep = progress !== undefined && progress.status === "skipped" ? progress.stepIndex : 0;
+    dispatch({ type: "start", tourId, fromStep });
+  };
   const doneCount = statuses.filter((status) => isDone(status, countSkipped)).length;
   const percent = items.length === 0 ? 0 : Math.round((doneCount / items.length) * 100);
 
@@ -54,7 +60,7 @@ export const Checklist = ({ title = "Getting started", items, countSkipped = fal
                 type="button"
                 className="tl-checklist__item"
                 data-done={done}
-                onClick={() => dispatch({ type: "start", tourId: item.tourId })}
+                onClick={() => launch(item.tourId)}
               >
                 <span className="tl-checklist__check" aria-hidden="true">
                   {done ? "✓" : ""}

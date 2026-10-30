@@ -232,7 +232,7 @@ describe("options", () => {
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     expect(screen.getByRole("dialog").textContent).toContain("Click it");
     fireEvent.click(screen.getByText("Create"));
-    expect(screen.getByRole("dialog").textContent).toContain("Done here");
+    await waitFor(() => expect(screen.getByRole("dialog").textContent).toContain("Done here"));
   });
 
   it("leaves arrow keys to inputs", async () => {

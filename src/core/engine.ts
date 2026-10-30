@@ -1,7 +1,8 @@
 import type { EngineState, ProgressMap, TourDefinition, TourEvent, TourEventType, TourProgress, TourStep } from "./types";
 
 export type EngineAction =
-  | { type: "start"; tourId: string; fromStep?: number }
+  /** `auto`: start only if no tour is running and this one was never started (auto-start, decided against the live state). */
+  | { type: "start"; tourId: string; fromStep?: number; auto?: boolean }
   | { type: "next" }
   | { type: "prev" }
   | { type: "goTo"; stepIndex: number }
@@ -145,6 +146,9 @@ export const transition = (
 ): TransitionResult => {
   switch (action.type) {
     case "start":
+      if (action.auto === true && (state.activeTourId !== null || state.progress[action.tourId] !== undefined)) {
+        return { state, events: [] };
+      }
       return start(state, registry, action.tourId, action.fromStep === undefined ? 0 : action.fromStep, now, isShown);
     case "next": {
       const active = getActive(state, registry);

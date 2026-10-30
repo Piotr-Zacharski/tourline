@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { findAnchor } from "../react/anchor";
+import { findAnchor, isOnRoute } from "../react/anchor";
 import { useTourlineContext } from "../react/context";
 import { useTourline } from "../react/hooks";
 import { Popover } from "./Popover";
@@ -39,22 +39,28 @@ const useKeyboard = ({ enabled, allowBack, allowSkip }: KeyboardOptions, next: (
   }, [enabled, allowBack, allowSkip, next, prev, skip]);
 };
 
-/** Moves to the next step when `eventName` fires on the target. Delegated, so a target that renders late still counts. */
+/**
+ * Moves to the next step when `eventName` fires on the target. Delegated, so a target that renders late still counts.
+ * The move waits for the app to handle the event first: a click that opens a menu has rendered it by then,
+ * so the next step can find (or, if `optional`, check) its target.
+ */
 const useAdvanceOn = (target: string | undefined, eventName: string | undefined, next: () => void) => {
   useEffect(() => {
     if (target === undefined || eventName === undefined) return undefined;
+    let pending: ReturnType<typeof setTimeout> | undefined;
     const onEvent = (event: Event) => {
       const element = findAnchor(target);
-      if (element !== null && event.target instanceof Node && element.contains(event.target)) next();
+      if (element !== null && event.target instanceof Node && element.contains(event.target)) {
+        clearTimeout(pending);
+        pending = setTimeout(next, 0);
+      }
     };
     document.addEventListener(eventName, onEvent, true);
-    return () => document.removeEventListener(eventName, onEvent, true);
+    return () => {
+      document.removeEventListener(eventName, onEvent, true);
+      clearTimeout(pending);
+    };
   }, [target, eventName, next]);
-};
-
-const isOnRoute = (route: string) => {
-  const { pathname, search } = window.location;
-  return route === pathname || route === pathname + search;
 };
 
 export const TourOverlay = ({ renderStep, ui: uiOptions }: TourOverlayProps) => {

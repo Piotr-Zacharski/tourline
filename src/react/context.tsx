@@ -6,6 +6,7 @@ import { createLocalStorageAdapter } from "../core/storage";
 import type { StorageAdapter } from "../core/storage";
 import type { Transport } from "../core/transport";
 import type { ContentOverrides, EngineState, TourDefinition, TourEvent, TourStep, TourlineContext } from "../core/types";
+import { isAnchorVisible, isOnRoute } from "./anchor";
 import { TourOverlay } from "../ui/TourOverlay";
 import type { StepRenderer, TourlineUIOptions } from "../ui/types";
 
@@ -15,6 +16,8 @@ export interface TourlineContextValue {
   dispatch: (action: EngineAction) => void;
   resolveStep: (tourId: string, stepIndex: number) => TourStep | null;
   isShown: StepFilter;
+  /** False until stored progress is loaded. Starting a tour before that would overwrite it. */
+  isReady: boolean;
   /** The provider's `context`, read at call time so steps always see the latest value. */
   getContext: () => TourlineContext;
   navigate?: (route: string) => void;
@@ -56,6 +59,13 @@ const applyOverride = (step: TourStep, tourId: string, overrides: ContentOverrid
   };
 };
 
+// An optional step needs its target on screen. Off its route, or without a DOM (SSR), it cannot be checked yet.
+const hasVisibleTarget = (step: TourStep) => {
+  if (step.optional !== true || step.target === undefined || typeof document === "undefined") return true;
+  if (step.route !== undefined && !isOnRoute(step.route)) return true;
+  return isAnchorVisible(step.target);
+};
+
 export const TourlineProvider = ({
   tours,
   children,
@@ -72,6 +82,7 @@ export const TourlineProvider = ({
   const registry = useMemo(() => createRegistry(tours), [tours]);
   const adapter = useMemo(() => (storage === undefined ? createLocalStorageAdapter() : storage), [storage]);
   const [state, setState] = useState<EngineState>(initialEngineState);
+  const [isReady, setIsReady] = useState(false);
   const stateRef = useRef(state);
   const listeners = useRef({ onEvent, transport, userId });
   listeners.current = { onEvent, transport, userId };
@@ -79,7 +90,10 @@ export const TourlineProvider = ({
   const contextRef = useRef<TourlineContext>(context === undefined ? {} : context);
   contextRef.current = context === undefined ? {} : context;
   const getContext = useCallback(() => contextRef.current, []);
-  const isShown = useCallback<StepFilter>((step) => step.when === undefined || step.when(contextRef.current), []);
+  const isShown = useCallback<StepFilter>(
+    (step) => (step.when === undefined || step.when(contextRef.current)) && hasVisibleTarget(step),
+    [],
+  );
 
   const dispatch = useCallback(
     (action: EngineAction) => {
@@ -98,9 +112,11 @@ export const TourlineProvider = ({
     [registry, adapter, isShown],
   );
 
-  // Hydrate after mount so server and client render the same markup.
+  // Hydrate after mount so server and client render the same markup. Both updates land in one render,
+  // so nothing sees isReady before the stored progress.
   useEffect(() => {
     dispatch({ type: "hydrate", progress: adapter.load() });
+    setIsReady(true);
   }, [adapter, dispatch]);
 
   const resolveStep = useCallback(
@@ -113,8 +129,8 @@ export const TourlineProvider = ({
   );
 
   const value = useMemo(
-    () => ({ state, registry, dispatch, resolveStep, isShown, getContext, navigate }),
-    [state, registry, dispatch, resolveStep, isShown, getContext, navigate],
+    () => ({ state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate }),
+    [state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate],
   );
 
   return (

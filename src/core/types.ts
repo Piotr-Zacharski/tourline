@@ -33,6 +33,12 @@ export interface TourStep<TStepId extends string = string> {
   allowSkip?: boolean;
   /** Show the step only when this returns true, e.g. behind a feature flag. Hidden steps are skipped. */
   when?: (context: TourlineContext) => boolean;
+  /**
+   * Skip the step when its target is missing or hidden (`display: none`, e.g. a desktop-only sidebar).
+   * Checked whenever the tour moves, so content that rendered since the tour started counts.
+   * A step with a `route` is only checked once the user is on that route.
+   */
+  optional?: boolean;
   /** Page the target lives on. The provider's `navigate` goes there before the step waits for its target. */
   route?: string;
   /** Runs when the step is shown. */

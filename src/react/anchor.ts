@@ -14,3 +14,15 @@ export const findAnchor = (id: string, root: ParentNode = document): HTMLElement
   const escaped = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(id) : id.replace(/"/g, '\\"');
   return root.querySelector<HTMLElement>(`[${ANCHOR_ATTRIBUTE}="${escaped}"]`);
 };
+
+/** True when the current URL is `route` (path, or path plus query). */
+export const isOnRoute = (route: string) => {
+  const { pathname, search } = window.location;
+  return route === pathname || route === pathname + search;
+};
+
+/** Rendered and laid out: `display: none` (on the element or an ancestor) leaves no client rects. */
+export const isAnchorVisible = (id: string) => {
+  const element = findAnchor(id);
+  return element !== null && element.getClientRects().length > 0;
+};

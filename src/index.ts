@@ -1,7 +1,7 @@
 export { TourlineProvider } from "./react/context";
 export type { TourlineProviderProps } from "./react/context";
-export { useTour, useTourline } from "./react/hooks";
-export type { ActiveTour, TourControls, TourlineControls } from "./react/hooks";
+export { useAutoStartTour, useTour, useTourline, useTourlineProgress } from "./react/hooks";
+export type { ActiveTour, AutoStartOptions, TourControls, TourlineControls, TourlineProgress } from "./react/hooks";
 export { tourAnchor, ANCHOR_ATTRIBUTE } from "./react/anchor";
 export type { AnchorProps } from "./react/anchor";
 export { createTourline, defineTour } from "./react/createTourline";

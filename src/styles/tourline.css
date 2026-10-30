@@ -1,5 +1,7 @@
-/* Tourline default theme. Override any --tl-* token to match your design system. */
-:root {
+/* Tourline default theme. Override any --tl-* token to match your design system.
+   Every default sits inside :where(), which has zero specificity, so a plain :root { --tl-accent: … }
+   in the app wins over the light and the dark defaults alike, whatever the CSS load order. */
+:where(:root) {
   --tl-z: 2147483000;
   --tl-font: inherit;
   --tl-radius: 12px;
@@ -20,7 +22,7 @@
 
 /* Dark follows the OS unless the app forces a theme with data-theme or a .light / .dark class (HeroUI, next-themes). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not(.light) {
+  :where(:root:not([data-theme="light"]):not(.light)) {
     --tl-overlay: rgba(0, 0, 0, 0.65);
     --tl-surface: #1c1e29;
     --tl-text: #f1f2f7;
@@ -33,8 +35,7 @@
   }
 }
 
-:root[data-theme="dark"],
-.dark {
+:where(:root[data-theme="dark"], .dark) {
   --tl-overlay: rgba(0, 0, 0, 0.65);
   --tl-surface: #1c1e29;
   --tl-text: #f1f2f7;

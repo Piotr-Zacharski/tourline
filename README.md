@@ -93,14 +93,32 @@ const StartTourButton = () => {
 
 ### Hooks
 
-- `useTour(tourId)` → `{ status, stepIndex, totalSteps, isActive, isDone, start(fromStep?), reset() }`
+- `useTour(tourId)` → `{ tourId, status, stepIndex, totalSteps, isActive, isCompleted, isSkipped, isDone, isReady, start(fromStep?), resume(), reset() }`
+  - `resume()` continues a skipped tour from the step the user left it on, and starts any other from the beginning.
+  - `isReady` is false until stored progress is loaded; before that every tour reads `"idle"`.
+- `useAutoStartTour(tourId, { enabled? })` starts a tour the first time a component renders: after progress is loaded, only if the tour was never started, and never over another running tour (it waits for it to end).
+- `useTourlineProgress(tourIds?)` → `{ tours, completed, total, isReady }` for all tours or the ones listed, e.g. for a "3 of 8 done" ring.
 - `useTourline()` → `{ active, next, prev, goTo, skip, complete }` for custom step UIs.
+
+`createTourline` returns typed versions: `onboarding.useTour`, `onboarding.useAutoStartTour`, `onboarding.useProgress`.
+
+```tsx
+const SupportersPage = () => {
+  onboarding.useAutoStartTour("supporters");
+  …
+};
+
+const OnboardingRing = () => {
+  const { completed, total, tours } = onboarding.useProgress();
+  // tours[i].resume() picks up a skipped tour
+};
+```
 
 Custom renderers (`renderStep`) get `{ active, targetRect, ui, next, prev, skip }`, where `ui` has every default filled in.
 
 ### Components
 
-- `<Checklist items={[{ tourId, label, description? }]} />`: a getting-started list that launches tours and ticks them off.
+- `<Checklist items={[{ tourId, label, description? }]} />`: a getting-started list that launches tours and ticks them off. A skipped tour continues where it was left.
 
 ### Step
 
@@ -117,6 +135,7 @@ interface TourStep {
   allowBack?: boolean;   // default true: Back button and ←
   allowSkip?: boolean;   // default true: Skip, ×, Esc and backdrop click
   when?: (ctx) => boolean; // show the step only when true, e.g. behind a feature flag
+  optional?: boolean;    // skip the step when its target is missing or hidden (display: none)
   route?: string;        // page the target lives on; the provider's navigate goes there first
   onEnter?: (ctx) => void; // runs when the step is shown
   onLeave?: (ctx) => void; // runs when the step is left (next, back, skip, done)
@@ -124,6 +143,8 @@ interface TourStep {
 ```
 
 Hidden steps (`when` returns false) are skipped by Next and Back, and the counter and dots only count the steps a user sees. Events keep the step's index in the definition, so funnels stay comparable across users.
+
+`optional: true` does the same for UI that is not always there: a link only some plans get, a desktop-only sidebar, a button that needs data. Without it, a step waits for its target (up to `ui.targetTimeout`) and then shows centered. The check runs whenever the tour moves, and only once the user is on the step's `route`.
 
 ### Feature flags and multi-page tours
 
@@ -156,6 +177,24 @@ A step with a `route` navigates there and waits for its target (up to `ui.target
 ### Theming
 
 Dark mode follows the OS, or the app when it sets `data-theme="dark"` or a `.dark` class on `<html>` (HeroUI, next-themes). `.light` / `data-theme="light"` force light.
+
+The defaults have zero specificity, so tokens you set on `:root` win over the light and the dark ones alike. That also means a token you set stays the same in dark mode while the ones you did not set switch, so set colours in pairs: `--tl-accent` with `--tl-accent-text` and `--tl-accent-soft`.
+
+A light-only app keeps the popover light under an OS dark theme by pinning every colour token:
+
+```css
+:root {
+  --tl-surface: #ffffff;
+  --tl-text: #161823;
+  --tl-text-muted: #636779;
+  --tl-border: #e4e6ee;
+  --tl-accent: #0f766e;
+  --tl-accent-text: #ffffff;
+  --tl-accent-soft: #e6f4f2;
+  --tl-success: #16a34a;
+  --tl-overlay: rgba(15, 17, 26, 0.55);
+}
+```
 
 ```css
 :root {
