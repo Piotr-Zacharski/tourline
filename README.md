@@ -47,7 +47,7 @@ const StartTourButton = () => {
 ## Why
 
 - **Anchors, not selectors.** Steps target a `data-tour-id` attribute, so renaming classes or restructuring markup does not break a tour.
-- **Waits for lazy UI.** If a target is not rendered yet (route change, async data), the step waits for it.
+- **Waits for lazy UI.** If a target is not rendered yet (route change, async data), the step waits for it with the popover hidden, then appears in place.
 - **Progress is persisted** (localStorage by default) and an interrupted tour resumes where the user left it.
 - **Events for every step:** `tour_started`, `step_viewed`, `tour_completed`, `tour_skipped`, each with `stepIndex` and `totalSteps`.
 - **Accessible:** dialog semantics, focus management, `Esc` / `←` / `→`, reduced-motion support.
@@ -66,11 +66,37 @@ const StartTourButton = () => {
 | `contentOverrides` | `ContentOverrides` | `{ [tourId]: { [stepId]: { title?, content? } } }` to change copy without a deploy. |
 | `userId` | `string` | Added to every event. |
 | `renderStep` | `(props) => ReactNode` | Headless mode: replace the default popover with your own UI. |
+| `ui` | `TourlineUIOptions` | Defaults for the built-in UI, see below. |
+| `context` | `TourlineContext` | App data passed to each step's `when`, `onEnter` and `onLeave`, e.g. `{ user }`. |
+| `navigate` | `(route) => void` | Client-side navigation for steps with a `route`: `router.push` (Next.js), `navigate` (react-router). |
+
+#### `ui`
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `labels` | English | `{ next, back, skip, done, close, progress(current, total) }`; any subset. |
+| `showProgress` | `true` | The "2 / 4" counter. |
+| `showDots` | `true` | The progress dots. |
+| `closeOnBackdropClick` | `true` | Clicking the dimmed page skips the tour. Clicks on the highlighted element never do. |
+| `keyboard` | `true` | `Esc` skips, `←` / `→` navigate. |
+| `placement` | `"bottom"` | For steps that do not set one. |
+| `gap` | `12` | Distance between the target and the popover, in px. |
+| `padding` | `6` | Space around the target inside the spotlight, in px. |
+| `targetTimeout` | `5000` | How long a step waits for a target that has not rendered yet (the popover stays hidden meanwhile) before showing centered, in ms. |
+
+```tsx
+<TourlineProvider
+  tours={onboarding.tours}
+  ui={{ labels: { next: "Dalej", back: "Wstecz", skip: "Pomiń", done: "Gotowe" }, showDots: false }}
+>
+```
 
 ### Hooks
 
 - `useTour(tourId)` → `{ status, stepIndex, totalSteps, isActive, isDone, start(fromStep?), reset() }`
 - `useTourline()` → `{ active, next, prev, goTo, skip, complete }` for custom step UIs.
+
+Custom renderers (`renderStep`) get `{ active, targetRect, ui, next, prev, skip }`, where `ui` has every default filled in.
 
 ### Components
 
@@ -85,16 +111,71 @@ interface TourStep {
   title: string;
   content: ReactNode;
   placement?: "top" | "bottom" | "left" | "right" | "center";
+  padding?: number;      // spotlight padding, overrides ui.padding
+  interactive?: boolean; // the highlighted element stays clickable
+  advanceOn?: "click" | "change" | …; // event on the target that goes to the next step (implies interactive)
+  allowBack?: boolean;   // default true: Back button and ←
+  allowSkip?: boolean;   // default true: Skip, ×, Esc and backdrop click
+  when?: (ctx) => boolean; // show the step only when true, e.g. behind a feature flag
+  route?: string;        // page the target lives on; the provider's navigate goes there first
+  onEnter?: (ctx) => void; // runs when the step is shown
+  onLeave?: (ctx) => void; // runs when the step is left (next, back, skip, done)
 }
 ```
 
+Hidden steps (`when` returns false) are skipped by Next and Back, and the counter and dots only count the steps a user sees. Events keep the step's index in the definition, so funnels stay comparable across users.
+
+### Feature flags and multi-page tours
+
+Type the context once, then pass it to the provider:
+
+```ts
+// tourline.d.ts
+import "tourline";
+declare module "tourline" {
+  interface TourlineContext {
+    user: User;
+  }
+}
+```
+
+```tsx
+const steps = [
+  { id: "plans", target: "plans-table", route: "/admin/my-projects", when: ({ user }) => user.canSeeProjectPlans, … },
+];
+
+<TourlineProvider tours={tours} context={{ user }} navigate={router.push}>
+```
+
+A step with a `route` navigates there and waits for its target (up to `ui.targetTimeout`) before showing.
+
+```ts
+{ id: "create", target: "new-invoice", title: "Try it", content: "Click New invoice.", advanceOn: "click", allowBack: false }
+```
+
 ### Theming
+
+Dark mode follows the OS, or the app when it sets `data-theme="dark"` or a `.dark` class on `<html>` (HeroUI, next-themes). `.light` / `data-theme="light"` force light.
 
 ```css
 :root {
   --tl-accent: #0f766e;
   --tl-radius: 10px;
   --tl-font: "Inter", sans-serif;
+}
+```
+
+## Next.js App Router
+
+The package is marked `"use client"`, so `<TourlineProvider>` can go straight into a Server Component layout. Tour definitions (`defineTour`, `createTourline`) and `onboarding.anchor()` belong in Client Components too; in a Server Component write the attribute directly: `data-tour-id="plans-table"`.
+
+```tsx
+// app/(admin)/layout.tsx
+import "tourline/styles.css";
+import { AdminTours } from "./admin-tours"; // "use client": TourlineProvider with context and navigate
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AdminTours>{children}</AdminTours>;
 }
 ```
 

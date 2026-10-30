@@ -1,22 +1,26 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createRegistry, initialEngineState, transition } from "../core/engine";
-import type { EngineAction, TourRegistry } from "../core/engine";
+import type { EngineAction, StepFilter, TourRegistry } from "../core/engine";
 import { createLocalStorageAdapter } from "../core/storage";
 import type { StorageAdapter } from "../core/storage";
 import type { Transport } from "../core/transport";
-import type { ContentOverrides, EngineState, TourDefinition, TourEvent, TourStep } from "../core/types";
+import type { ContentOverrides, EngineState, TourDefinition, TourEvent, TourStep, TourlineContext } from "../core/types";
 import { TourOverlay } from "../ui/TourOverlay";
-import type { StepRenderer } from "../ui/types";
+import type { StepRenderer, TourlineUIOptions } from "../ui/types";
 
 export interface TourlineContextValue {
   state: EngineState;
   registry: TourRegistry;
   dispatch: (action: EngineAction) => void;
   resolveStep: (tourId: string, stepIndex: number) => TourStep | null;
+  isShown: StepFilter;
+  /** The provider's `context`, read at call time so steps always see the latest value. */
+  getContext: () => TourlineContext;
+  navigate?: (route: string) => void;
 }
 
-const TourlineContext = createContext<TourlineContextValue | null>(null);
+const ReactTourlineContext = createContext<TourlineContextValue | null>(null);
 
 export interface TourlineProviderProps {
   tours: readonly TourDefinition[];
@@ -32,6 +36,12 @@ export interface TourlineProviderProps {
   userId?: string;
   /** Replace the default popover with your own UI (headless mode). */
   renderStep?: StepRenderer;
+  /** Labels, keyboard, backdrop and layout defaults for the built-in step UI. */
+  ui?: TourlineUIOptions;
+  /** Passed to each step's `when`, `onEnter` and `onLeave`. Extend `TourlineContext` to type it. */
+  context?: TourlineContext;
+  /** Client-side navigation for steps with a `route`, e.g. Next.js `router.push` or react-router `navigate`. */
+  navigate?: (route: string) => void;
 }
 
 const applyOverride = (step: TourStep, tourId: string, overrides: ContentOverrides | undefined): TourStep => {
@@ -55,6 +65,9 @@ export const TourlineProvider = ({
   contentOverrides,
   userId,
   renderStep,
+  ui,
+  context,
+  navigate,
 }: TourlineProviderProps) => {
   const registry = useMemo(() => createRegistry(tours), [tours]);
   const adapter = useMemo(() => (storage === undefined ? createLocalStorageAdapter() : storage), [storage]);
@@ -62,10 +75,15 @@ export const TourlineProvider = ({
   const stateRef = useRef(state);
   const listeners = useRef({ onEvent, transport, userId });
   listeners.current = { onEvent, transport, userId };
+  // Steps with `when` but no `context` on the provider get an empty object, the default shape of TourlineContext.
+  const contextRef = useRef<TourlineContext>(context === undefined ? {} : context);
+  contextRef.current = context === undefined ? {} : context;
+  const getContext = useCallback(() => contextRef.current, []);
+  const isShown = useCallback<StepFilter>((step) => step.when === undefined || step.when(contextRef.current), []);
 
   const dispatch = useCallback(
     (action: EngineAction) => {
-      const result = transition(stateRef.current, action, registry);
+      const result = transition(stateRef.current, action, registry, Date.now(), isShown);
       if (result.state === stateRef.current) return;
       stateRef.current = result.state;
       setState(result.state);
@@ -77,7 +95,7 @@ export const TourlineProvider = ({
         if (sink !== undefined) sink.send(enriched);
       }
     },
-    [registry, adapter],
+    [registry, adapter, isShown],
   );
 
   // Hydrate after mount so server and client render the same markup.
@@ -94,18 +112,21 @@ export const TourlineProvider = ({
     [registry, contentOverrides],
   );
 
-  const value = useMemo(() => ({ state, registry, dispatch, resolveStep }), [state, registry, dispatch, resolveStep]);
+  const value = useMemo(
+    () => ({ state, registry, dispatch, resolveStep, isShown, getContext, navigate }),
+    [state, registry, dispatch, resolveStep, isShown, getContext, navigate],
+  );
 
   return (
-    <TourlineContext.Provider value={value}>
+    <ReactTourlineContext.Provider value={value}>
       {children}
-      <TourOverlay renderStep={renderStep} />
-    </TourlineContext.Provider>
+      <TourOverlay renderStep={renderStep} ui={ui} />
+    </ReactTourlineContext.Provider>
   );
 };
 
 export const useTourlineContext = (): TourlineContextValue => {
-  const context = useContext(TourlineContext);
+  const context = useContext(ReactTourlineContext);
   if (context === null) {
     throw new Error("[tourline] Hooks must be used inside <TourlineProvider>.");
   }

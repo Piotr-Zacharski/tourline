@@ -220,6 +220,10 @@ body {
 .panel__hint { font-size: 12px; font-weight: 400; color: var(--muted); }
 .switch { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
 .switch input { accent-color: var(--accent); width: 16px; height: 16px; margin-top: 2px; }
+.range { display: grid; gap: 4px; font-size: 14px; }
+.range span { display: flex; justify-content: space-between; }
+.range output { color: var(--muted); font-variant-numeric: tabular-nums; }
+.range input { width: 100%; accent-color: var(--accent); }
 .log { display: grid; gap: 4px; max-height: 220px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .log__empty { margin: 0; font-size: 13px; color: var(--muted); }
 .log__row {
@@ -292,7 +296,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     <p class="intro__lede"><strong>Product tours that live in your code.</strong> Type-safe steps, anchors that survive refactors, and events for a drop-off funnel. Try it on the example invoicing app below.</p>
     <ul class="intro__tags">
       <li>React 18+</li>
-      <li><li>~9 kB gzip</li>lt; 8 kB gzip</li>
+      <li>&lt; 9 kB gzip</li>
       <li>TypeScript</li>
       <li>MIT</li>
     </ul>

@@ -1,4 +1,4 @@
-import type { EngineState, ProgressMap, TourDefinition, TourEvent, TourEventType, TourProgress } from "./types";
+import type { EngineState, ProgressMap, TourDefinition, TourEvent, TourEventType, TourProgress, TourStep } from "./types";
 
 export type EngineAction =
   | { type: "start"; tourId: string; fromStep?: number }
@@ -17,6 +17,11 @@ export interface TransitionResult {
 
 export type TourRegistry = ReadonlyMap<string, TourDefinition>;
 
+/** Decides whether a step is shown. Hidden steps are skipped by every move; the default shows all of them. */
+export type StepFilter = (step: TourStep) => boolean;
+
+const showAll: StepFilter = () => true;
+
 export const initialEngineState: EngineState = { activeTourId: null, progress: {} };
 
 export const createRegistry = (tours: readonly TourDefinition[]): TourRegistry => {
@@ -34,6 +39,15 @@ export const createRegistry = (tours: readonly TourDefinition[]): TourRegistry =
 };
 
 const clampIndex = (index: number, total: number): number => Math.min(Math.max(index, 0), total - 1);
+
+/** First shown step from `from` in `direction`, or -1 when there is none. */
+const findShown = (tour: TourDefinition, from: number, direction: 1 | -1, isShown: StepFilter): number => {
+  for (let index = from; index >= 0 && index < tour.steps.length; index += direction) {
+    const step = tour.steps[index];
+    if (step !== undefined && isShown(step)) return index;
+  }
+  return -1;
+};
 
 const makeEvent = (
   type: TourEventType,
@@ -76,12 +90,21 @@ const finish = (
   };
 };
 
-const moveTo = (state: EngineState, registry: TourRegistry, targetIndex: number, now: number): TransitionResult => {
+const moveTo = (
+  state: EngineState,
+  registry: TourRegistry,
+  targetIndex: number,
+  direction: 1 | -1,
+  now: number,
+  isShown: StepFilter,
+): TransitionResult => {
   const active = getActive(state, registry);
   if (active === null) return { state, events: [] };
   const total = active.tour.steps.length;
   if (targetIndex >= total) return finish(state, registry, "completed", now);
-  const stepIndex = clampIndex(targetIndex, total);
+  const stepIndex = findShown(active.tour, clampIndex(targetIndex, total), direction, isShown);
+  // Nothing shown ahead means the tour is over; nothing shown behind means stay put.
+  if (stepIndex === -1) return direction === 1 ? finish(state, registry, "completed", now) : { state, events: [] };
   if (stepIndex === active.progress.stepIndex) return { state, events: [] };
   return {
     state: withProgress(state, { ...active.progress, stepIndex, updatedAt: now }, active.tour.id),
@@ -95,13 +118,16 @@ const start = (
   tourId: string,
   fromStep: number,
   now: number,
+  isShown: StepFilter,
 ): TransitionResult => {
   const tour = registry.get(tourId);
   if (tour === undefined) {
     throw new Error(`[tourline] Unknown tour "${tourId}".`);
   }
+  const stepIndex = findShown(tour, clampIndex(fromStep, tour.steps.length), 1, isShown);
+  // Every remaining step is hidden for this user: there is nothing to show, so the tour does not start.
+  if (stepIndex === -1) return { state, events: [] };
   const closed = finish(state, registry, "skipped", now);
-  const stepIndex = clampIndex(fromStep, tour.steps.length);
   const progress: TourProgress = { tourId, status: "active", stepIndex, updatedAt: now };
   return {
     state: withProgress(closed.state, progress, tourId),
@@ -115,20 +141,28 @@ export const transition = (
   action: EngineAction,
   registry: TourRegistry,
   now: number = Date.now(),
+  isShown: StepFilter = showAll,
 ): TransitionResult => {
   switch (action.type) {
     case "start":
-      return start(state, registry, action.tourId, action.fromStep === undefined ? 0 : action.fromStep, now);
+      return start(state, registry, action.tourId, action.fromStep === undefined ? 0 : action.fromStep, now, isShown);
     case "next": {
       const active = getActive(state, registry);
-      return active === null ? { state, events: [] } : moveTo(state, registry, active.progress.stepIndex + 1, now);
+      return active === null
+        ? { state, events: [] }
+        : moveTo(state, registry, active.progress.stepIndex + 1, 1, now, isShown);
     }
     case "prev": {
       const active = getActive(state, registry);
-      return active === null ? { state, events: [] } : moveTo(state, registry, active.progress.stepIndex - 1, now);
+      return active === null
+        ? { state, events: [] }
+        : moveTo(state, registry, active.progress.stepIndex - 1, -1, now, isShown);
     }
-    case "goTo":
-      return moveTo(state, registry, action.stepIndex, now);
+    case "goTo": {
+      const active = getActive(state, registry);
+      const direction = active !== null && action.stepIndex < active.progress.stepIndex ? -1 : 1;
+      return moveTo(state, registry, action.stepIndex, direction, now, isShown);
+    }
     case "skip":
       return finish(state, registry, "skipped", now);
     case "complete":
@@ -139,14 +173,18 @@ export const transition = (
       return { state: { activeTourId, progress: rest }, events: [] };
     }
     case "hydrate": {
-      // A tour left "active" in storage resumes where the user left it.
+      // A tour left "active" in storage resumes where the user left it, or at the next step still shown to them.
       const resumable = Object.values(action.progress).find(
         (item) => item.status === "active" && registry.has(item.tourId),
       );
-      return {
-        state: { activeTourId: resumable === undefined ? null : resumable.tourId, progress: action.progress },
-        events: [],
-      };
+      const tour = resumable === undefined ? undefined : registry.get(resumable.tourId);
+      if (resumable === undefined || tour === undefined) {
+        return { state: { activeTourId: null, progress: action.progress }, events: [] };
+      }
+      const stepIndex = findShown(tour, clampIndex(resumable.stepIndex, tour.steps.length), 1, isShown);
+      if (stepIndex === -1) return { state: { activeTourId: null, progress: action.progress }, events: [] };
+      const progress = stepIndex === resumable.stepIndex ? action.progress : { ...action.progress, [tour.id]: { ...resumable, stepIndex } };
+      return { state: { activeTourId: tour.id, progress }, events: [] };
     }
   }
 };

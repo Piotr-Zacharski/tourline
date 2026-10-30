@@ -39,8 +39,14 @@ export const useTour = (tourId: string): TourControls => {
 export interface ActiveTour {
   tourId: string;
   step: TourStep;
+  /** Index in the tour definition, as in analytics events. */
   stepIndex: number;
   totalSteps: number;
+  /** 0-based position among the steps shown to this user (steps hidden by `when` do not count). */
+  shownIndex: number;
+  /** Number of steps shown to this user. */
+  shownTotal: number;
+  /** First and last among the shown steps. */
   isFirst: boolean;
   isLast: boolean;
 }
@@ -56,7 +62,7 @@ export interface TourlineControls {
 
 /** The currently running tour plus navigation — what custom step UIs need. */
 export const useTourline = (): TourlineControls => {
-  const { state, registry, dispatch, resolveStep } = useTourlineContext();
+  const { state, registry, dispatch, resolveStep, isShown } = useTourlineContext();
 
   const active = useMemo((): ActiveTour | null => {
     if (state.activeTourId === null) return null;
@@ -65,16 +71,19 @@ export const useTourline = (): TourlineControls => {
     if (tour === undefined || progress === undefined) return null;
     const step = resolveStep(tour.id, progress.stepIndex);
     if (step === null) return null;
-    const totalSteps = tour.steps.length;
+    const shown = tour.steps.flatMap((candidate, index) => (isShown(candidate) ? [index] : []));
+    const shownIndex = shown.indexOf(progress.stepIndex);
     return {
       tourId: tour.id,
       step,
       stepIndex: progress.stepIndex,
-      totalSteps,
-      isFirst: progress.stepIndex === 0,
-      isLast: progress.stepIndex === totalSteps - 1,
+      totalSteps: tour.steps.length,
+      shownIndex,
+      shownTotal: shown.length,
+      isFirst: shownIndex === 0,
+      isLast: shownIndex === shown.length - 1,
     };
-  }, [state, registry, resolveStep]);
+  }, [state, registry, resolveStep, isShown]);
 
   return useMemo(
     () => ({

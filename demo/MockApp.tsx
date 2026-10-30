@@ -25,7 +25,7 @@ const RevenueChart = () => {
       <p className="chart__title">Revenue, € thousands</p>
       <div className="chart__bars">
         {MONTHS.map((month) => (
-          <div key={month.label} className="chart__col">
+          <div key={month.label} className="chart__col" {...(month.label === "Sep" ? onboarding.anchor("best-month") : {})}>
             <span className="chart__value">{month.value.toFixed(1)}</span>
             <span className="chart__bar" style={{ height: `${(month.value / max) * 100}%` }} />
             <span className="chart__label">{month.label}</span>
@@ -59,7 +59,7 @@ const InvoiceTable = () => (
       </thead>
       <tbody>
         {INVOICES.map((invoice) => (
-          <tr key={invoice.number}>
+          <tr key={invoice.number} {...(invoice.status === "Overdue" ? onboarding.anchor("overdue-row") : {})}>
             <td className="mono">{invoice.number}</td>
             <td>{invoice.client}</td>
             <td>{invoice.due}</td>
@@ -84,7 +84,9 @@ export const MockApp = ({ view, onViewChange }: { view: View; onViewChange: (vie
         <button type="button" data-active={view === "invoices"} onClick={() => onViewChange("invoices")}>
           Invoices
         </button>
-        <button type="button">Clients</button>
+        <button type="button" {...onboarding.anchor("nav-clients")}>
+          Clients
+        </button>
         <button
           type="button"
           data-active={view === "reports"}
@@ -93,7 +95,9 @@ export const MockApp = ({ view, onViewChange }: { view: View; onViewChange: (vie
         >
           Reports
         </button>
-        <button type="button">Settings</button>
+        <button type="button" {...onboarding.anchor("nav-settings")}>
+          Settings
+        </button>
       </nav>
     </aside>
     <div className="mock__main">
@@ -116,9 +120,11 @@ export const MockApp = ({ view, onViewChange }: { view: View; onViewChange: (vie
             <div className="stat" {...onboarding.anchor("outstanding")}>
               <span className="stat__label">Outstanding</span>
               <span className="stat__value">€3,260</span>
-              <span className="stat__note stat__note--bad">€860 overdue</span>
+              <span className="stat__note stat__note--bad" {...onboarding.anchor("overdue")}>
+                €860 overdue
+              </span>
             </div>
-            <div className="stat">
+            <div className="stat" {...onboarding.anchor("paid")}>
               <span className="stat__label">Paid this month</span>
               <span className="stat__value">€5,430</span>
               <span className="stat__note">+12% vs Sep</span>

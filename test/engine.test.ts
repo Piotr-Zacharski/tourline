@@ -93,3 +93,52 @@ describe("transition", () => {
     expect(() => createRegistry([{ id: "empty", steps: [] }])).toThrow(/no steps/);
   });
 });
+
+describe("hidden steps", () => {
+  // Hides the middle "sidebar" step, as a feature flag would.
+  const hideSidebar = (step: { id: string }) => step.id !== "sidebar";
+  const runShown = (actions: Parameters<typeof transition>[1][], isShown: (step: { id: string }) => boolean) => {
+    let state = initialEngineState;
+    const events: string[] = [];
+    for (const action of actions) {
+      const result = transition(state, action, registry, 1000, isShown);
+      state = result.state;
+      events.push(...result.events.map((event) => `${event.type}:${event.stepId}`));
+    }
+    return { state, events };
+  };
+
+  it("skips hidden steps in both directions", () => {
+    const forward = runShown([{ type: "start", tourId: "welcome" }, { type: "next" }], hideSidebar);
+    expect(forward.state.progress.welcome?.stepIndex).toBe(2);
+    expect(forward.events).toEqual(["tour_started:intro", "step_viewed:intro", "step_viewed:create"]);
+
+    const back = runShown([{ type: "start", tourId: "welcome", fromStep: 2 }, { type: "prev" }], hideSidebar);
+    expect(back.state.progress.welcome?.stepIndex).toBe(0);
+  });
+
+  it("starts at the first shown step and completes when nothing shown is left", () => {
+    const hideIntro = (step: { id: string }) => step.id !== "intro";
+    const started = runShown([{ type: "start", tourId: "welcome" }], hideIntro);
+    expect(started.state.progress.welcome?.stepIndex).toBe(1);
+
+    const onlyIntro = (step: { id: string }) => step.id === "intro";
+    const done = runShown([{ type: "start", tourId: "welcome" }, { type: "next" }], onlyIntro);
+    expect(done.state.progress.welcome?.status).toBe("completed");
+  });
+
+  it("does not start a tour whose steps are all hidden", () => {
+    const { state, events } = runShown([{ type: "start", tourId: "welcome" }], () => false);
+    expect(state).toBe(initialEngineState);
+    expect(events).toEqual([]);
+  });
+
+  it("resumes on the next shown step after hydrate", () => {
+    const { state } = runShown(
+      [{ type: "hydrate", progress: { welcome: { tourId: "welcome", status: "active", stepIndex: 1, updatedAt: 1 } } }],
+      hideSidebar,
+    );
+    expect(state.activeTourId).toBe("welcome");
+    expect(state.progress.welcome?.stepIndex).toBe(2);
+  });
+});

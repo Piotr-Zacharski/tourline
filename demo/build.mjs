@@ -2,11 +2,12 @@
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("../", import.meta.url);
 
 const result = await build({
-  entryPoints: [new URL("demo/main.tsx", root).pathname],
+  entryPoints: [fileURLToPath(new URL("demo/main.tsx", root))],
   bundle: true,
   minify: true,
   format: "iife",

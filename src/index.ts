@@ -8,10 +8,10 @@ export { createTourline, defineTour } from "./react/createTourline";
 export type { TypedTourline } from "./react/createTourline";
 export { Checklist } from "./ui/Checklist";
 export type { ChecklistItem, ChecklistProps } from "./ui/Checklist";
-export type { StepRenderProps, StepRenderer } from "./ui/types";
+export type { ResolvedUIOptions, StepRenderProps, StepRenderer, TourlineLabels, TourlineUIOptions } from "./ui/types";
 
 export { transition, createRegistry, initialEngineState } from "./core/engine";
-export type { EngineAction, TourRegistry, TransitionResult } from "./core/engine";
+export type { EngineAction, StepFilter, TourRegistry, TransitionResult } from "./core/engine";
 export { computePosition } from "./core/position";
 export type { PositionResult, Rect, Size } from "./core/position";
 export { createLocalStorageAdapter, createMemoryStorageAdapter } from "./core/storage";
@@ -30,4 +30,5 @@ export type {
   TourProgress,
   TourStatus,
   TourStep,
+  TourlineContext,
 } from "./core/types";

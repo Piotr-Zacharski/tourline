@@ -23,10 +23,11 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup && cp src/styles/tourline.css dist/styles.css",
+    "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:demo": "node demo/build.mjs"
+    "build:demo": "node demo/build.mjs",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "react",

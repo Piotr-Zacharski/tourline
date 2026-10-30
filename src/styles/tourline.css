@@ -18,8 +18,9 @@
   --tl-popover-width: 320px;
 }
 
+/* Dark follows the OS unless the app forces a theme with data-theme or a .light / .dark class (HeroUI, next-themes). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme="light"]):not(.light) {
     --tl-overlay: rgba(0, 0, 0, 0.65);
     --tl-surface: #1c1e29;
     --tl-text: #f1f2f7;
@@ -32,7 +33,8 @@
   }
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+.dark {
   --tl-overlay: rgba(0, 0, 0, 0.65);
   --tl-surface: #1c1e29;
   --tl-text: #f1f2f7;
@@ -66,6 +68,10 @@
   border-radius: var(--tl-radius-sm);
   box-shadow: 0 0 0 9999px var(--tl-overlay), var(--tl-ring);
   pointer-events: none;
+}
+
+/* Glide only between steps; while the page scrolls the hole sticks to the target instead of trailing it. */
+.tl-spotlight[data-gliding="true"] {
   transition: top 220ms ease, left 220ms ease, width 220ms ease, height 220ms ease;
 }
 
@@ -82,6 +88,12 @@
   box-shadow: var(--tl-shadow);
   outline: none;
   animation: tl-pop 180ms ease-out;
+}
+
+/* Not positioned yet: hidden, and the pop animation starts only once it is in place. */
+.tl-popover[data-ready="false"] {
+  visibility: hidden;
+  animation: none;
 }
 
 .tl-close {
@@ -150,6 +162,11 @@
   gap: 8px;
 }
 
+/* No dots above the buttons (ui.showDots: false). */
+.tl-content + .tl-actions {
+  margin-top: 14px;
+}
+
 .tl-button {
   padding: 8px 14px;
   border: 0;
@@ -168,6 +185,8 @@
 }
 
 .tl-button--primary {
+  /* Stays on the right when there is no Back or Skip button. */
+  margin-left: auto;
   background: var(--tl-accent);
   color: var(--tl-accent-text);
 }
@@ -312,7 +331,7 @@
 @media (prefers-reduced-motion: reduce) {
   .tl-backdrop,
   .tl-popover { animation: none; }
-  .tl-spotlight,
+  .tl-spotlight[data-gliding="true"],
   .tl-dot,
   .tl-checklist__bar > span { transition: none; }
 }
