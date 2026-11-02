@@ -4,3 +4,5 @@ demo/dist
 *.tgz
 .omc/
 .idea/
+.DS_Store
+.claude/
