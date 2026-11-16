@@ -1,6 +1,6 @@
 {
   "name": "tourline",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Product tours that live in your code. Type-safe, refactor-proof onboarding for React.",
   "license": "MIT",
   "author": "PZ",
