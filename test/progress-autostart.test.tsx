@@ -65,6 +65,41 @@ describe("useAutoStartTour", () => {
     expect(dialogText()).toContain("First A");
   });
 
+  it("waits for an optional target during auto-start instead of skipping it", async () => {
+    const optionalFirst = defineTour({
+      id: "lazy-optional",
+      steps: [{ id: "lazy", target: "later", optional: true, title: "Later", content: "…" }],
+    });
+    await act(async () => {
+      render(
+        <TourlineProvider tours={[optionalFirst]} storage={createMemoryStorageAdapter()} ui={{ targetTimeout: 100 }}>
+          <AutoStart tourId="lazy-optional" />
+        </TourlineProvider>,
+      );
+    });
+    expect(screen.getByRole("dialog").getAttribute("data-ready")).toBe("false");
+  });
+
+  it("reports and skips an optional auto-start target after its timeout", async () => {
+    const events: string[] = [];
+    const optionalFirst = defineTour({
+      id: "lazy-timeout",
+      steps: [
+        { id: "lazy", target: "never", optional: true, title: "Later", content: "…" },
+        { id: "end", title: "End", content: "…" },
+      ],
+    });
+    await act(async () => {
+      render(
+        <TourlineProvider tours={[optionalFirst]} storage={createMemoryStorageAdapter()} ui={{ targetTimeout: 10 }} onEvent={(event) => events.push(event.type)}>
+          <AutoStart tourId="lazy-timeout" />
+        </TourlineProvider>,
+      );
+    });
+    await waitFor(() => expect(dialogText()).toContain("End"));
+    expect(events).toContain("target_missing");
+  });
+
   it("does not let two auto-starts in the same render cancel each other", async () => {
     const storage = await renderWith(
       <>
@@ -198,6 +233,38 @@ describe("optional steps", () => {
     fireEvent.click(screen.getByText("Next"));
     expect(dialogText()).toContain("Shown");
     expect(dialogText()).toContain("2 / 2");
+  });
+
+  it("updates the shown total when optional targets enter and leave the DOM", async () => {
+    const dynamic = defineTour({
+      id: "dynamic",
+      steps: [
+        { id: "intro", title: "Intro", content: "…" },
+        { id: "dynamic-target", target: "dynamic-target", title: "Dynamic", content: "…", optional: true },
+      ],
+    });
+    const DynamicApp = () => {
+      const [shown, setShown] = useState(false);
+      const tour = useTour("dynamic");
+      return (
+        <>
+          <button onClick={() => tour.start()}>start dynamic</button>
+          <button onClick={() => setShown((value) => !value)}>toggle target</button>
+          {shown && <div {...tourAnchor("dynamic-target")} data-visible="true" />}
+        </>
+      );
+    };
+    render(
+      <TourlineProvider tours={[dynamic]} storage={createMemoryStorageAdapter()}>
+        <DynamicApp />
+      </TourlineProvider>,
+    );
+    fireEvent.click(screen.getByText("start dynamic"));
+    expect(dialogText()).toContain("1 / 1");
+    fireEvent.click(screen.getByText("toggle target"));
+    await waitFor(() => expect(dialogText()).toContain("1 / 2"));
+    fireEvent.click(screen.getByText("toggle target"));
+    await waitFor(() => expect(dialogText()).toContain("1 / 1"));
   });
 });
 

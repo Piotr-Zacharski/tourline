@@ -17,6 +17,7 @@ const CHECKLIST = [
 const EVENT_LABEL: Record<TourEvent["type"], string> = {
   tour_started: "started",
   step_viewed: "viewed",
+  target_missing: "missing target",
   tour_completed: "completed",
   tour_skipped: "skipped",
 };

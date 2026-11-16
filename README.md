@@ -49,7 +49,7 @@ const StartTourButton = () => {
 - **Anchors, not selectors.** Steps target a `data-tour-id` attribute, so renaming classes or restructuring markup does not break a tour.
 - **Waits for lazy UI.** If a target is not rendered yet (route change, async data), the step waits for it with the popover hidden, then appears in place.
 - **Progress is persisted** (localStorage by default) and an interrupted tour resumes where the user left it.
-- **Events for every step:** `tour_started`, `step_viewed`, `tour_completed`, `tour_skipped`, each with `stepIndex` and `totalSteps`.
+- **Events for every step:** `tour_started`, `step_viewed`, `target_missing`, `tour_completed`, `tour_skipped`, each with `stepIndex` and `totalSteps`.
 - **Accessible:** dialog semantics, focus management, `Esc` / `←` / `→`, reduced-motion support.
 - **Themeable** through `--tl-*` CSS variables, with light and dark built in.
 
@@ -62,13 +62,14 @@ const StartTourButton = () => {
 | `tours` | `TourDefinition[]` | All tours in the app. |
 | `storage` | `StorageAdapter` | Defaults to `createLocalStorageAdapter()`. Use `createMemoryStorageAdapter()` in tests. |
 | `onEvent` | `(event) => void` | Forward to PostHog, GA, Mixpanel, your backend. |
-| `transport` | `Transport` | Batched delivery, e.g. `createHttpTransport({ endpoint, projectKey })`. |
+| `transport` | `Transport` | Batched delivery, e.g. `createHttpTransport({ endpoint, projectKey })`; call its optional `dispose()` when you discard it. For cross-origin endpoints that should avoid a CORS preflight, pass `contentType: "text/plain"`. |
 | `contentOverrides` | `ContentOverrides` | `{ [tourId]: { [stepId]: { title?, content? } } }` to change copy without a deploy. |
-| `userId` | `string` | Added to every event. |
+| `userId` | `string` | Added to every event and scopes the default localStorage progress to that user. |
 | `renderStep` | `(props) => ReactNode` | Headless mode: replace the default popover with your own UI. |
 | `ui` | `TourlineUIOptions` | Defaults for the built-in UI, see below. |
 | `context` | `TourlineContext` | App data passed to each step's `when`, `onEnter` and `onLeave`, e.g. `{ user }`. |
 | `navigate` | `(route) => void` | Client-side navigation for steps with a `route`: `router.push` (Next.js), `navigate` (react-router). |
+| `isOnRoute` | `(route) => boolean` | Custom matcher for dynamic routes, locale prefixes or a base path. |
 
 #### `ui`
 
@@ -144,7 +145,7 @@ interface TourStep {
 
 Hidden steps (`when` returns false) are skipped by Next and Back, and the counter and dots only count the steps a user sees. Events keep the step's index in the definition, so funnels stay comparable across users.
 
-`optional: true` does the same for UI that is not always there: a link only some plans get, a desktop-only sidebar, a button that needs data. Without it, a step waits for its target (up to `ui.targetTimeout`) and then shows centered. The check runs whenever the tour moves, and only once the user is on the step's `route`.
+`optional: true` does the same for UI that is not always there: a link only some plans get, a desktop-only sidebar, a button that needs data. Without it, a step waits for its target (up to `ui.targetTimeout`) and then shows centered. The check runs whenever the tour moves, and only once the user is on the step's `route`; auto-start waits for its first optional target so lazy UI is not skipped during initial render.
 
 ### Feature flags and multi-page tours
 

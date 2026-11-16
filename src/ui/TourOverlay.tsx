@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { findAnchor, isOnRoute } from "../react/anchor";
+import { findAnchor } from "../react/anchor";
 import { useTourlineContext } from "../react/context";
 import { useTourline } from "../react/hooks";
 import { Popover } from "./Popover";
@@ -22,13 +22,15 @@ interface KeyboardOptions {
 
 const isEditable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
-  (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+  (target.isContentEditable ||
+    target.closest('input, textarea, select, [contenteditable="true"], [role="slider"], [role="tab"], [role="listbox"], [role="combobox"], [role="option"]') !== null);
 
 const useKeyboard = ({ enabled, allowBack, allowSkip }: KeyboardOptions, next: () => void, prev: () => void, skip: () => void) => {
   useEffect(() => {
     if (!enabled) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       // Arrow keys move the caret in an interactive step's input; leave them to it.
+      if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
       if (isEditable(event.target) && event.key !== "Escape") return;
       if (event.key === "Escape" && allowSkip) skip();
       if (event.key === "ArrowRight") next();
@@ -65,16 +67,41 @@ const useAdvanceOn = (target: string | undefined, eventName: string | undefined,
 
 export const TourOverlay = ({ renderStep, ui: uiOptions }: TourOverlayProps) => {
   const { active, next, prev, skip } = useTourline();
-  const { getContext, navigate } = useTourlineContext();
+  const { dispatch, getContext, navigate, isOnRoute } = useTourlineContext();
   const [mounted, setMounted] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const isOnRouteRef = useRef(isOnRoute);
+  isOnRouteRef.current = isOnRoute;
   const ui = useMemo(() => resolveUIOptions(uiOptions), [uiOptions]);
   const step = active === null ? null : active.step;
   const stepKey = active === null ? "" : `${active.tourId}:${active.step.id}`;
-  const { rect, rectKey, pending } = useTargetRect(step === null ? undefined : step.target, stepKey, ui.targetTimeout);
+  const reportMissing = useCallback(() => {
+    dispatch({ type: "targetMissing" });
+    if (step?.optional === true) dispatch({ type: "next" });
+  }, [dispatch, step?.optional]);
+  const { rect, rectKey, pending } = useTargetRect(step === null ? undefined : step.target, stepKey, ui.targetTimeout, reportMissing);
   // The spotlight glides from the previous rect; the popover waits for the new one instead of centering first.
   const targetRect = pending ? null : rect;
   const allowBack = step === null || step.allowBack !== false;
   const allowSkip = step === null || step.allowSkip !== false;
+  const interactive = step !== null && (step.interactive === true || step.advanceOn !== undefined);
+
+  useEffect(() => {
+    if (active === null) {
+      previousFocus.current?.focus({ preventScroll: true });
+      previousFocus.current = null;
+      return undefined;
+    }
+    if (previousFocus.current === null && document.activeElement instanceof HTMLElement) previousFocus.current = document.activeElement;
+    if (interactive) return undefined;
+    const root = rootRef.current;
+    if (root === null) return undefined;
+    const siblings = Array.from(document.body.children).filter((element): element is HTMLElement => element instanceof HTMLElement && element !== root);
+    const previous = siblings.map((element) => element.inert);
+    siblings.forEach((element) => { element.inert = true; });
+    return () => siblings.forEach((element, index) => { element.inert = previous[index] ?? false; });
+  }, [active === null, stepKey, interactive]);
 
   // Read through refs so this fires once per step, not on every re-render that rebuilds the step object.
   const stepRef = useRef(step);
@@ -85,7 +112,7 @@ export const TourOverlay = ({ renderStep, ui: uiOptions }: TourOverlayProps) => 
     const entered = stepRef.current;
     if (entered === null) return undefined;
     // Go to the step's page first; useTargetRect then waits for the target to render there.
-    if (entered.route !== undefined && !isOnRoute(entered.route)) {
+    if (entered.route !== undefined && !isOnRouteRef.current(entered.route)) {
       const go = navigateRef.current;
       if (go !== undefined) go(entered.route);
       else console.warn(`[tourline] Step "${entered.id}" has route "${entered.route}" but <TourlineProvider> has no navigate.`);
@@ -104,12 +131,12 @@ export const TourOverlay = ({ renderStep, ui: uiOptions }: TourOverlayProps) => 
 
   const props = { active, targetRect, ui, next, prev, skip };
   return createPortal(
-    <div className="tl-root" data-tour={active.tourId}>
+    <div ref={rootRef} className="tl-root" data-tour={active.tourId}>
       <Spotlight
         rect={rect}
         rectKey={rectKey}
         padding={step.padding === undefined ? ui.padding : step.padding}
-        interactive={step.interactive === true || step.advanceOn !== undefined}
+        interactive={interactive}
         onBackdropClick={ui.closeOnBackdropClick && allowSkip ? skip : undefined}
       />
       {renderStep === undefined ? <Popover key={stepKey} pending={pending} {...props} /> : renderStep(props)}

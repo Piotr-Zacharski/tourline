@@ -50,7 +50,7 @@ const prefersReducedMotion = () =>
  * The previous rect is kept until the new one is measured, so step changes never flash an empty frame.
  * An off-screen target is scrolled into view first and reported only once the scroll has settled.
  */
-export const useTargetRect = (target: string | undefined, stepKey: string, timeout: number): TargetRect => {
+export const useTargetRect = (target: string | undefined, stepKey: string, timeout: number, onMissing?: () => void): TargetRect => {
   const [measured, setMeasured] = useState<Measured>({ key: "", rect: null, waiting: false });
 
   useEffect(() => {
@@ -137,6 +137,7 @@ export const useTargetRect = (target: string | undefined, stepKey: string, timeo
       waitTimer = setTimeout(() => {
         waiting = false;
         commit(null);
+        onMissing?.();
       }, timeout);
     }
 
@@ -159,7 +160,7 @@ export const useTargetRect = (target: string | undefined, stepKey: string, timeo
       window.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
     };
-  }, [target, stepKey, timeout]);
+  }, [target, stepKey, timeout, onMissing]);
 
   return { rect: measured.rect, rectKey: measured.key, pending: measured.key !== stepKey || measured.waiting };
 };

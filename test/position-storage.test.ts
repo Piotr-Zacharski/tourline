@@ -1,5 +1,7 @@
 import { computePosition } from "../src/core/position";
 import { parseProgress } from "../src/core/storage";
+import { createHttpTransport } from "../src/core/transport";
+import type { TourEvent } from "../src/core/types";
 
 const viewport = { width: 1000, height: 800 };
 const size = { width: 300, height: 150 };
@@ -43,5 +45,44 @@ describe("parseProgress", () => {
       mismatch: { tourId: "other", status: "active", stepIndex: 0, updatedAt: 1 },
     });
     expect(Object.keys(parseProgress(raw))).toEqual(["ok"]);
+  });
+});
+
+describe("HTTP transport", () => {
+  const event: TourEvent = { type: "step_viewed", tourId: "a", stepId: "b", stepIndex: 0, totalSteps: 1, timestamp: 1 };
+
+  it("retries failed fetches and removes lifecycle listeners on dispose", async () => {
+    vi.useFakeTimers();
+    const pagehide = vi.spyOn(window, "removeEventListener");
+    const visibility = vi.spyOn(document, "removeEventListener");
+    vi.stubGlobal("navigator", { sendBeacon: () => false });
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 }).mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = createHttpTransport({ endpoint: "/events", projectKey: "p", flushInterval: 10 });
+    transport.send(event);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ headers: { "Content-Type": "application/json" } });
+    transport.dispose?.();
+    transport.send(event);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(pagehide).toHaveBeenCalledWith("pagehide", expect.any(Function));
+    expect(visibility).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("supports text/plain for cross-origin simple requests", () => {
+    vi.stubGlobal("navigator", { sendBeacon: () => false });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = createHttpTransport({ endpoint: "https://events.example", projectKey: "p", contentType: "text/plain" });
+    transport.send(event);
+    transport.flush();
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ headers: { "Content-Type": "text/plain" } });
+    transport.dispose?.();
+    vi.unstubAllGlobals();
   });
 });

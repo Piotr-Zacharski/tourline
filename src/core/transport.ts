@@ -3,6 +3,7 @@ import type { TourEvent } from "./types";
 export interface Transport {
   send: (event: TourEvent) => void;
   flush: () => void;
+  dispose?: () => void;
 }
 
 export interface HttpTransportOptions {
@@ -11,6 +12,8 @@ export interface HttpTransportOptions {
   /** Milliseconds to wait before sending a batch. */
   flushInterval?: number;
   maxBatchSize?: number;
+  /** Use text/plain for a CORS-safelisted cross-origin request. Defaults to application/json. */
+  contentType?: "application/json" | "text/plain";
 }
 
 /**
@@ -22,9 +25,11 @@ export const createHttpTransport = ({
   projectKey,
   flushInterval = 2000,
   maxBatchSize = 20,
+  contentType = "application/json",
 }: HttpTransportOptions): Transport => {
   let queue: TourEvent[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
 
   const flush = () => {
     if (timer !== null) {
@@ -32,28 +37,37 @@ export const createHttpTransport = ({
       timer = null;
     }
     if (queue.length === 0) return;
-    const body = JSON.stringify({ projectKey, events: queue });
+    const events = queue;
+    const body = JSON.stringify({ projectKey, events });
     queue = [];
     const beaconSent =
       typeof navigator !== "undefined" &&
       typeof navigator.sendBeacon === "function" &&
-      navigator.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+      navigator.sendBeacon(endpoint, new Blob([body], { type: contentType }));
     if (!beaconSent) {
       void fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": contentType },
         body,
         keepalive: true,
-      }).catch(() => undefined);
+      }).then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      }).catch(() => {
+        queue = [...events, ...queue];
+        if (!disposed && timer === null) timer = setTimeout(flush, flushInterval);
+      });
     }
   };
 
-  if (typeof window !== "undefined") {
-    window.addEventListener("pagehide", flush);
-  }
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") flush();
+  };
+  if (typeof window !== "undefined") window.addEventListener("pagehide", flush);
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibilityChange);
 
   return {
     send: (event) => {
+      if (disposed) return;
       queue.push(event);
       if (queue.length >= maxBatchSize) {
         flush();
@@ -62,5 +76,13 @@ export const createHttpTransport = ({
       if (timer === null) timer = setTimeout(flush, flushInterval);
     },
     flush,
+    dispose: () => {
+      flush();
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      if (typeof window !== "undefined") window.removeEventListener("pagehide", flush);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibilityChange);
+    },
   };
 };

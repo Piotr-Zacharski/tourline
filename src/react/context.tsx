@@ -21,6 +21,7 @@ export interface TourlineContextValue {
   /** The provider's `context`, read at call time so steps always see the latest value. */
   getContext: () => TourlineContext;
   navigate?: (route: string) => void;
+  isOnRoute: (route: string) => boolean;
 }
 
 const ReactTourlineContext = createContext<TourlineContextValue | null>(null);
@@ -45,6 +46,8 @@ export interface TourlineProviderProps {
   context?: TourlineContext;
   /** Client-side navigation for steps with a `route`, e.g. Next.js `router.push` or react-router `navigate`. */
   navigate?: (route: string) => void;
+  /** Override route matching for dynamic routes, locale prefixes or a base path. */
+  isOnRoute?: (route: string) => boolean;
 }
 
 const applyOverride = (step: TourStep, tourId: string, overrides: ContentOverrides | undefined): TourStep => {
@@ -60,9 +63,9 @@ const applyOverride = (step: TourStep, tourId: string, overrides: ContentOverrid
 };
 
 // An optional step needs its target on screen. Off its route, or without a DOM (SSR), it cannot be checked yet.
-const hasVisibleTarget = (step: TourStep) => {
+const hasVisibleTarget = (step: TourStep, matchesRoute: (route: string) => boolean) => {
   if (step.optional !== true || step.target === undefined || typeof document === "undefined") return true;
-  if (step.route !== undefined && !isOnRoute(step.route)) return true;
+  if (step.route !== undefined && !matchesRoute(step.route)) return true;
   return isAnchorVisible(step.target);
 };
 
@@ -78,12 +81,17 @@ export const TourlineProvider = ({
   ui,
   context,
   navigate,
+  isOnRoute: matchesRoute = isOnRoute,
 }: TourlineProviderProps) => {
   const registry = useMemo(() => createRegistry(tours), [tours]);
-  const adapter = useMemo(() => (storage === undefined ? createLocalStorageAdapter() : storage), [storage]);
+  const adapter = useMemo(
+    () => (storage === undefined ? createLocalStorageAdapter(userId === undefined ? undefined : `tourline:progress:${userId}`) : storage),
+    [storage, userId],
+  );
   const [state, setState] = useState<EngineState>(initialEngineState);
   const [isReady, setIsReady] = useState(false);
   const stateRef = useRef(state);
+  const hydratedAdapter = useRef<StorageAdapter | null>(null);
   const listeners = useRef({ onEvent, transport, userId });
   listeners.current = { onEvent, transport, userId };
   // Steps with `when` but no `context` on the provider get an empty object, the default shape of TourlineContext.
@@ -91,17 +99,21 @@ export const TourlineProvider = ({
   contextRef.current = context === undefined ? {} : context;
   const getContext = useCallback(() => contextRef.current, []);
   const isShown = useCallback<StepFilter>(
-    (step) => (step.when === undefined || step.when(contextRef.current)) && hasVisibleTarget(step),
-    [],
+    (step) => (step.when === undefined || step.when(contextRef.current)) && hasVisibleTarget(step, matchesRoute),
+    [matchesRoute],
   );
+  const isEligible = useCallback<StepFilter>((step) => step.when === undefined || step.when(contextRef.current), []);
 
   const dispatch = useCallback(
     (action: EngineAction) => {
-      const result = transition(stateRef.current, action, registry, Date.now(), isShown);
-      if (result.state === stateRef.current) return;
-      stateRef.current = result.state;
-      setState(result.state);
-      if (action.type !== "hydrate") adapter.save(result.state.progress);
+      const previous = stateRef.current;
+      const result = transition(previous, action, registry, Date.now(), action.type === "start" && action.auto === true ? isEligible : isShown);
+      if (result.state === previous && result.events.length === 0) return;
+      if (result.state !== previous) {
+        stateRef.current = result.state;
+        setState(result.state);
+        if (action.type !== "hydrate") adapter.save(result.state.progress);
+      }
       const { onEvent: emit, transport: sink, userId: currentUser } = listeners.current;
       for (const event of result.events) {
         const enriched = currentUser === undefined ? event : { ...event, userId: currentUser };
@@ -109,12 +121,14 @@ export const TourlineProvider = ({
         if (sink !== undefined) sink.send(enriched);
       }
     },
-    [registry, adapter, isShown],
+    [registry, adapter, isShown, isEligible],
   );
 
   // Hydrate after mount so server and client render the same markup. Both updates land in one render,
   // so nothing sees isReady before the stored progress.
   useEffect(() => {
+    if (hydratedAdapter.current === adapter) return;
+    hydratedAdapter.current = adapter;
     dispatch({ type: "hydrate", progress: adapter.load() });
     setIsReady(true);
   }, [adapter, dispatch]);
@@ -129,8 +143,8 @@ export const TourlineProvider = ({
   );
 
   const value = useMemo(
-    () => ({ state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate }),
-    [state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate],
+    () => ({ state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate, isOnRoute: matchesRoute }),
+    [state, registry, dispatch, resolveStep, isShown, isReady, getContext, navigate, matchesRoute],
   );
 
   return (

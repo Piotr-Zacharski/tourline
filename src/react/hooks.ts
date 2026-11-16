@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { EngineAction } from "../core/engine";
 import type { TourDefinition, TourProgress, TourStatus, TourStep } from "../core/types";
+import { ANCHOR_ATTRIBUTE } from "./anchor";
 import { useTourlineContext } from "./context";
 
 export interface TourControls {
@@ -143,7 +144,22 @@ export interface TourlineControls {
 export const useTourline = (): TourlineControls => {
   const { state, registry, dispatch, resolveStep, isShown } = useTourlineContext();
 
-  const active = useMemo((): ActiveTour | null => {
+  const [, setDomVersion] = useState(0);
+  useEffect(() => {
+    if (state.activeTourId === null || typeof MutationObserver === "undefined") return undefined;
+    const hasAnchor = (node: Node) =>
+      node instanceof HTMLElement && (node.hasAttribute(ANCHOR_ATTRIBUTE) || node.querySelector(`[${ANCHOR_ATTRIBUTE}]`) !== null);
+    const observer = new MutationObserver((records) => {
+      if (records.some((record) => record.type === "attributes" ? hasAnchor(record.target) : [...record.addedNodes, ...record.removedNodes].some(hasAnchor))) {
+        setDomVersion((value) => value + 1);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: [ANCHOR_ATTRIBUTE, "class", "style", "hidden"] });
+    return () => observer.disconnect();
+  }, [state.activeTourId]);
+
+  // Recompute on every render: target visibility can change without engine state changing.
+  const active = ((): ActiveTour | null => {
     if (state.activeTourId === null) return null;
     const tour = registry.get(state.activeTourId);
     const progress = state.progress[state.activeTourId];
@@ -162,7 +178,7 @@ export const useTourline = (): TourlineControls => {
       isFirst: shownIndex === 0,
       isLast: shownIndex === shown.length - 1,
     };
-  }, [state, registry, resolveStep, isShown]);
+  })();
 
   return useMemo(
     () => ({

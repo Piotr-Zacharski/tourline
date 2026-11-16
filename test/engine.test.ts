@@ -69,7 +69,7 @@ describe("transition", () => {
   });
 
   it("resumes an active tour on hydrate and ignores unknown tours", () => {
-    const { state } = run([
+    const { state, events } = run([
       {
         type: "hydrate",
         progress: {
@@ -79,6 +79,14 @@ describe("transition", () => {
       },
     ]);
     expect(state.activeTourId).toBe("welcome");
+    expect(events).toEqual(["step_viewed:welcome:create"]);
+  });
+
+  it("reports a missing target without changing state", () => {
+    const started = transition(initialEngineState, { type: "start", tourId: "welcome" }, registry, 1);
+    const result = transition(started.state, { type: "targetMissing" }, registry, 2);
+    expect(result.state).toBe(started.state);
+    expect(result.events.map((event) => event.type)).toEqual(["target_missing"]);
   });
 
   it("resets progress", () => {

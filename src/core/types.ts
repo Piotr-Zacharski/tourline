@@ -68,7 +68,7 @@ export interface EngineState {
   progress: ProgressMap;
 }
 
-export type TourEventType = "tour_started" | "step_viewed" | "tour_completed" | "tour_skipped";
+export type TourEventType = "tour_started" | "step_viewed" | "tour_completed" | "tour_skipped" | "target_missing";
 
 export interface TourEvent {
   type: TourEventType;

@@ -9,6 +9,7 @@ export type EngineAction =
   | { type: "skip" }
   | { type: "complete" }
   | { type: "reset"; tourId: string }
+  | { type: "targetMissing" }
   | { type: "hydrate"; progress: ProgressMap };
 
 export interface TransitionResult {
@@ -176,6 +177,12 @@ export const transition = (
       const activeTourId = state.activeTourId === action.tourId ? null : state.activeTourId;
       return { state: { activeTourId, progress: rest }, events: [] };
     }
+    case "targetMissing": {
+      const active = getActive(state, registry);
+      return active === null
+        ? { state, events: [] }
+        : { state, events: [makeEvent("target_missing", active.tour, active.progress.stepIndex, now)] };
+    }
     case "hydrate": {
       // A tour left "active" in storage resumes where the user left it, or at the next step still shown to them.
       const resumable = Object.values(action.progress).find(
@@ -188,7 +195,7 @@ export const transition = (
       const stepIndex = findShown(tour, clampIndex(resumable.stepIndex, tour.steps.length), 1, isShown);
       if (stepIndex === -1) return { state: { activeTourId: null, progress: action.progress }, events: [] };
       const progress = stepIndex === resumable.stepIndex ? action.progress : { ...action.progress, [tour.id]: { ...resumable, stepIndex } };
-      return { state: { activeTourId: tour.id, progress }, events: [] };
+      return { state: { activeTourId: tour.id, progress }, events: [makeEvent("step_viewed", tour, stepIndex, now)] };
     }
   }
 };

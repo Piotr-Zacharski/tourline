@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import {
   Checklist,
   TourlineProvider,
@@ -64,6 +64,24 @@ describe("React integration", () => {
     expect(events.every((event) => event.userId === "u1")).toBe(true);
   });
 
+  it("scopes default persisted progress by user id", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    render(
+      <TourlineProvider tours={onboarding.tours} userId="alice">
+        <StartButton />
+      </TourlineProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("Start (idle)")).toBeTruthy());
+    fireEvent.click(screen.getByText("Start (idle)"));
+    expect(localStorage.getItem("tourline:progress:alice")).toContain('"welcome"');
+    expect(localStorage.getItem("tourline:progress")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it("supports keyboard navigation and Escape to skip", async () => {
     render(<App />);
     fireEvent.click(screen.getByText("Start (idle)"));
@@ -73,6 +91,32 @@ describe("React integration", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Start (skipped)")).toBeTruthy();
+  });
+
+  it("leaves modified, prevented and widget arrow keys to the page", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByText("Start (idle)"));
+    await screen.findByRole("dialog");
+    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+    const prevented = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    prevented.preventDefault();
+    act(() => window.dispatchEvent(prevented));
+    const slider = document.body.appendChild(document.createElement("div"));
+    slider.setAttribute("role", "slider");
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(screen.getByRole("dialog").textContent).toContain("Welcome aboard");
+    slider.remove();
+  });
+
+  it("makes non-interactive page content inert and restores focus when done", async () => {
+    render(<App />);
+    const start = screen.getByText("Start (idle)");
+    start.focus();
+    fireEvent.click(start);
+    await screen.findByRole("dialog");
+    expect(start.closest("div")?.inert).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.activeElement).toBe(start);
   });
 
   it("applies remote content overrides", async () => {
@@ -99,6 +143,23 @@ describe("React integration", () => {
       );
     });
     expect((screen.getByRole("dialog")).textContent).toContain("Create a project");
+  });
+
+  it("emits one resumed step view in StrictMode", async () => {
+    const events: TourEvent[] = [];
+    const storage = createMemoryStorageAdapter({
+      welcome: { tourId: "welcome", status: "active", stepIndex: 1, updatedAt: 1 },
+    });
+    await act(async () => {
+      render(
+        <StrictMode>
+          <TourlineProvider tours={onboarding.tours} storage={storage} onEvent={(event) => events.push(event)}>
+            <div />
+          </TourlineProvider>
+        </StrictMode>,
+      );
+    });
+    expect(events.map((event) => event.type)).toEqual(["step_viewed"]);
   });
 
   it("uses a custom renderer in headless mode", async () => {
@@ -174,11 +235,11 @@ const LazyStart = () => {
   );
 };
 
-const LazyApp = ({ ui }: { ui?: TourlineUIOptions }) => {
+const LazyApp = ({ ui, onEvent }: { ui?: TourlineUIOptions; onEvent?: (event: TourEvent) => void }) => {
   const [storage] = useState(createMemoryStorageAdapter);
   const [shown, setShown] = useState(false);
   return (
-    <TourlineProvider tours={lazyTours} storage={storage} ui={ui}>
+    <TourlineProvider tours={lazyTours} storage={storage} ui={ui} onEvent={onEvent}>
       <LazyStart />
       <button type="button" onClick={() => setShown(true)}>
         Render target
@@ -261,6 +322,13 @@ describe("options", () => {
     expect(screen.getByRole("dialog").getAttribute("data-placement")).toBe("center");
   });
 
+  it("reports a target that times out", async () => {
+    const events: TourEvent[] = [];
+    render(<LazyApp ui={{ targetTimeout: 10 }} onEvent={(event) => events.push(event)} />);
+    fireEvent.click(screen.getByText("Start lazy"));
+    await waitFor(() => expect(events.map((event) => event.type)).toContain("target_missing"));
+  });
+
   it("can turn off the keyboard", async () => {
     render(<GuidedApp ui={{ keyboard: false }} />);
     fireEvent.click(screen.getByText("Start guided"));
@@ -306,10 +374,10 @@ const FlaggedStart = () => {
   );
 };
 
-const FlaggedApp = ({ flags, navigate }: { flags: FlagContext; navigate?: (route: string) => void }) => {
+const FlaggedApp = ({ flags, navigate, isOnRoute }: { flags: FlagContext; navigate?: (route: string) => void; isOnRoute?: (route: string) => boolean }) => {
   const [storage] = useState(createMemoryStorageAdapter);
   return (
-    <TourlineProvider tours={flaggedTours} storage={storage} context={flags} navigate={navigate}>
+    <TourlineProvider tours={flaggedTours} storage={storage} context={flags} navigate={navigate} isOnRoute={isOnRoute}>
       <FlaggedStart />
     </TourlineProvider>
   );
@@ -341,6 +409,37 @@ describe("context, when and route", () => {
     expect(routes).toEqual([]);
     fireEvent.click(screen.getByText("Next"));
     await waitFor(() => expect(routes).toEqual(["/reports"]));
+  });
+
+  it("accepts a custom route matcher", async () => {
+    const navigate = vi.fn();
+    render(<FlaggedApp flags={{ canSeeReports: false }} navigate={navigate} isOnRoute={(route) => route === "/reports"} />);
+    fireEvent.click(screen.getByText("Start flagged"));
+    fireEvent.click(await screen.findByText("Next"));
+    await waitFor(() => expect(navigate).not.toHaveBeenCalled());
+  });
+
+  it("does not repeat lifecycle hooks when an inline route matcher changes identity", async () => {
+    const onEnter = vi.fn();
+    const routed = defineTour({ id: "routed", steps: [{ id: "route", route: "/projects/1", title: "Route", content: "…", onEnter }] });
+    const RoutedStart = () => {
+      const tour = useTour("routed");
+      return <button onClick={() => tour.start()}>Start routed</button>;
+    };
+    const RoutedApp = ({ tick }: { tick: number }) => {
+      const [storage] = useState(createMemoryStorageAdapter);
+      return (
+        <TourlineProvider tours={[routed]} storage={storage} isOnRoute={(route) => route.startsWith("/projects/")}>
+          <RoutedStart />
+          <span>{tick}</span>
+        </TourlineProvider>
+      );
+    };
+    const view = render(<RoutedApp tick={0} />);
+    fireEvent.click(screen.getByText("Start routed"));
+    await screen.findByRole("dialog");
+    view.rerender(<RoutedApp tick={1} />);
+    expect(onEnter).toHaveBeenCalledTimes(1);
   });
 });
 
